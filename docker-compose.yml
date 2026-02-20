@@ -15,5 +15,28 @@ services:
       timeout: 5s
       retries: 5
 
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      FEEDGEN_HOSTNAME: ${FEEDGEN_HOSTNAME:-localhost}
+      FEEDGEN_PUBLISHER_DID: ${FEEDGEN_PUBLISHER_DID:?FEEDGEN_PUBLISHER_DID is required}
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/bluesky_feeds?sslmode=disable
+      FEEDGEN_FIREHOSE_URL: ${FEEDGEN_FIREHOSE_URL:-wss://jetstream1.us-east.bsky.network/subscribe}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  deps_only:
+    image: alpine:latest
+    command: sh -c "echo start"
+    depends_on:
+      - postgres
+
 volumes:
   pgdata:

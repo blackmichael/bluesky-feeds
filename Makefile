@@ -6,7 +6,8 @@ LDFLAGS := -ldflags "-s -w"
 BUILD_DIR := bin
 
 .PHONY: all build build-publish run clean test test-verbose test-coverage lint fmt vet tidy check help \
-	docker-up docker-down docker-reset generate publish unpublish migrate-up migrate-down migrate-force
+	docker-up docker-down docker-reset docker-build docker-run docker-logs docker-stop-server docker-up-deps-only \
+	generate publish unpublish migrate-up migrate-down migrate-force
 
 ## help: print this help message
 help:
@@ -81,16 +82,26 @@ check: fmt vet test
 generate:
 	$(GO) generate ./...
 
-## docker-up: start local Postgres via docker-compose
+## docker-up: start server and dependencies via docker-compose (configure via .env)
 docker-up:
-	docker-compose up -d
-	@echo "Waiting for Postgres to be ready..."
-	@until docker-compose exec postgres pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
-	@echo "Postgres is ready"
+	docker-compose up --build -d
+	@echo "Services started. Server available at http://localhost:3000"
+
+## docker-up-deps-only: start only dependencies, no server
+docker-up-deps-only:
+	docker-compose up -d deps_only
+	@echo "Services started."
 
 ## docker-down: stop local Postgres
 docker-down:
 	docker-compose down --volumes
+
+# docker-logs: streams server logs to your shell
+docker-logs:
+	docker logs -f bluesky-feeds-server-1
+
+docker-stop-server:
+	docker stop bluesky-feeds-server-1
 
 ## docker-reset: stop Postgres and destroy data volume
 docker-reset:
@@ -121,3 +132,7 @@ migrate-force:
 
 ## setup: start database and run migrations (first-time setup)
 setup: docker-up migrate-up
+
+## docker-build: build Docker image
+docker-build:
+	docker build -t $(APP_NAME) .

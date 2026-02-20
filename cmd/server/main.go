@@ -43,8 +43,7 @@ func run() error {
 	logger.Info("connected to database")
 
 	// Set up feed service with feed configurations
-	agenticFeedURI := domain.NewAgenticFeedConfig(cfg.PublisherDID, "agentic")
-	feedConfigs := []domain.FeedConfig{agenticFeedURI}
+	feedConfigs := domain.GetFeedConfigs(cfg.PublisherDID)
 	feedService, err := domain.NewFeedService(feedConfigs, repo, repo, logger)
 	if err != nil {
 		return fmt.Errorf("create feed service: %w", err)
@@ -58,12 +57,7 @@ func run() error {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start the firehose subscriber in the background
-	subscriber := firehose.NewSubscriber(
-		cfg.FirehoseURL,
-		feedService,
-		logger,
-	)
-
+	subscriber := firehose.NewSubscriber(cfg.FirehoseURL, feedService, logger)
 	go func() {
 		if err := subscriber.Start(ctx); err != nil && ctx.Err() == nil {
 			logger.Error("firehose subscriber exited with error", "error", err)
@@ -75,7 +69,6 @@ func run() error {
 
 	// Start the HTTP server
 	server := httpserver.NewServer(cfg, feedService, logger)
-
 	go func() {
 		if err := server.Start(); err != nil && err != http.ErrServerClosed {
 			logger.Error("http server exited with error", "error", err)

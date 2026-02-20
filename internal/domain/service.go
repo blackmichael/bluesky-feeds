@@ -29,12 +29,18 @@ type feed struct {
 	langs   map[string]struct{} // nil means no filter
 }
 
+func GetFeedConfigs(publisherDID string) []FeedConfig {
+	return []FeedConfig{
+		NewAgenticFeedConfig(publisherDID),
+	}
+}
+
 func newFeedURI(publisherDID, feedName string) string {
 	return fmt.Sprintf("at://%s/app.bsky.feed.generator/%s", publisherDID, feedName)
 }
 
-func NewAgenticFeedConfig(publisherDID, feedName string) FeedConfig {
-	feedURI := newFeedURI(publisherDID, feedName)
+func NewAgenticFeedConfig(publisherDID string) FeedConfig {
+	feedURI := newFeedURI(publisherDID, "agentic")
 	return FeedConfig{
 		URI:      feedURI,
 		Keywords: []string{"agentic", "agentic engineering", "agentic ai", "llm agents", "multi-agent", "llm benchmarks", "ai workflows", "llm orchestration", "context window", "claude", "claude opus", "claude sonnet", "claude haiku", "gpt-", "codex", "composer-1", "gemini", "hugging face", "opencode", "meta llama"},
