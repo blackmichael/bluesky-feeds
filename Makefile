@@ -6,7 +6,7 @@ LDFLAGS := -ldflags "-s -w"
 BUILD_DIR := bin
 
 .PHONY: all build build-publish run clean test test-verbose test-coverage lint fmt vet tidy check help \
-	docker-up docker-down docker-reset docker-build docker-run docker-logs docker-stop-server docker-up-deps-only \
+	docker-up docker-down docker-reset docker-build docker-build-arm64 docker-save-arm64 docker-run docker-logs docker-stop-server docker-up-deps-only \
 	generate publish unpublish migrate-up migrate-down migrate-force
 
 ## help: print this help message
@@ -133,6 +133,15 @@ migrate-force:
 ## setup: start database and run migrations (first-time setup)
 setup: docker-up migrate-up
 
-## docker-build: build Docker image
+## docker-build: build Docker image for current platform
 docker-build:
 	docker build -t $(APP_NAME) .
+
+## docker-build-arm64: build Docker image for ARM64
+docker-build-arm64:
+	docker build --build-arg TARGETARCH=arm64 -t $(APP_NAME):arm64 .
+
+## docker-save-arm64: save ARM64 image to tar file
+docker-save-arm64: docker-build-arm64
+	docker save $(APP_NAME):arm64 | gzip > bin/$(APP_NAME)-arm64.tar.gz
+	@echo "Image saved to bin/$(APP_NAME)-arm64.tar.gz"
