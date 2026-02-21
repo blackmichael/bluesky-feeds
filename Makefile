@@ -110,12 +110,12 @@ docker-reset:
 ## publish: publish a feed generator record to BlueSky (use ARGS to pass flags)
 ## 	e.g. make publish ARGS='--rkey my-feed --name "My Feed" --description "A cool feed"'
 publish: build-publish
-	$(BUILD_DIR)/$(APP_NAME)-publish $(ARGS)
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; $(BUILD_DIR)/$(APP_NAME)-publish $(ARGS)
 
 ## unpublish: delete a feed generator record from BlueSky
 ## 	e.g. make unpublish ARGS='--rkey my-feed'
 unpublish: build-publish
-	$(BUILD_DIR)/$(APP_NAME)-publish --unpublish $(ARGS)
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; $(BUILD_DIR)/$(APP_NAME)-publish --unpublish $(ARGS)
 
 ## migrate-up: run database migrations up (required before first run)
 migrate-up:

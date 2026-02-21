@@ -2,18 +2,43 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: bluesky_feeds
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-bluesky_feeds}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  postgres_init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: []
+    environment:
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-bluesky_feeds}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+    command: >
+      sh -c "
+        echo 'Waiting for postgres to be ready...' &&
+        sleep 2 &&
+        echo 'Running migrations...' &&
+        migrate -path /app/migrations -database postgres://$${DB_USER}:$${DB_PASSWORD}@$${DB_HOST}:$${DB_PORT}/$${DB_NAME}?sslmode=$${DB_SSLMODE} up &&
+        echo 'Migrations completed successfully'
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
 
   server:
     build:
@@ -25,11 +50,13 @@ services:
       PORT: 3000
       FEEDGEN_HOSTNAME: ${FEEDGEN_HOSTNAME:-localhost}
       FEEDGEN_PUBLISHER_DID: ${FEEDGEN_PUBLISHER_DID:?FEEDGEN_PUBLISHER_DID is required}
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/bluesky_feeds?sslmode=disable
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-bluesky_feeds}?sslmode=${DB_SSLMODE:-disable}
       FEEDGEN_FIREHOSE_URL: ${FEEDGEN_FIREHOSE_URL:-wss://jetstream1.us-east.bsky.network/subscribe}
     depends_on:
       postgres:
         condition: service_healthy
+      postgres_init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   deps_only:

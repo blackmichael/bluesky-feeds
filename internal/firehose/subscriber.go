@@ -94,6 +94,7 @@ func (s *Subscriber) subscribe(ctx context.Context) error {
 	defer conn.Close()
 
 	s.logger.Info("connected to firehose")
+	s.logger.Info("starting firehose processing", "start_ts", time.UnixMicro(cursor).Format(time.RFC3339Nano))
 
 	lastCursorSave := time.Now()
 	var latestCursor int64
@@ -176,13 +177,6 @@ func (s *Subscriber) handleCommit(ctx context.Context, event *jetstreamEvent) (m
 		matched, err := s.feedService.ProcessNewPost(ctx, incoming)
 		if err != nil {
 			return false, err
-		}
-
-		if matched {
-			s.logger.Info("matched post",
-				"uri", uri,
-				"text_preview", truncate(incoming.Text, 100),
-			)
 		}
 
 		return matched, nil
