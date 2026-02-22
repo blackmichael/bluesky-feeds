@@ -60,12 +60,23 @@ func (c *Client) DID() string {
 	return c.did
 }
 
+// BlobRef represents an AT Protocol blob reference for uploaded content.
+type BlobRef struct {
+	Type string `json:"$type"`
+	Ref  struct {
+		Link string `json:"$link"`
+	} `json:"ref"`
+	MimeType string `json:"mimeType"`
+	Size     int    `json:"size"`
+}
+
 // FeedGeneratorRecord is the record body for app.bsky.feed.generator.
 type FeedGeneratorRecord struct {
-	DID         string `json:"did"`
-	DisplayName string `json:"displayName"`
-	Description string `json:"description,omitempty"`
-	CreatedAt   string `json:"createdAt"`
+	DID         string   `json:"did"`
+	DisplayName string   `json:"displayName"`
+	Description string   `json:"description,omitempty"`
+	Avatar      *BlobRef `json:"avatar,omitempty"`
+	CreatedAt   string   `json:"createdAt"`
 }
 
 // PublishFeedGenerator creates or updates a feed generator record in the
@@ -109,6 +120,43 @@ func (c *Client) UnpublishFeedGenerator(ctx context.Context, rkey string) error 
 	}
 
 	return nil
+}
+
+// UploadBlob uploads raw image bytes as a blob and returns a reference.
+// The blob will be deleted if not referenced in a record within a time window.
+func (c *Client) UploadBlob(ctx context.Context, data []byte, mimeType string) (*BlobRef, error) {
+	if c.accessJwt == "" {
+		return nil, fmt.Errorf("not authenticated: call Login first")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.pds+"/xrpc/com.atproto.repo.uploadBlob", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", mimeType)
+	req.Header.Set("Authorization", "Bearer "+c.accessJwt)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result uploadBlobResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &result.Blob, nil
 }
 
 func (c *Client) post(ctx context.Context, path string, body any, result any) error {
@@ -167,4 +215,8 @@ type deleteRecordRequest struct {
 	Repo       string `json:"repo"`
 	Collection string `json:"collection"`
 	RKey       string `json:"rkey"`
+}
+
+type uploadBlobResponse struct {
+	Blob BlobRef `json:"blob"`
 }

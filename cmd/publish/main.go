@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/blackmichael/bluesky-feeds/internal/bluesky"
@@ -26,6 +28,7 @@ func run() error {
 		feedRKey    string
 		displayName string
 		description string
+		avatarPath  string
 		unpublish   bool
 	)
 
@@ -36,6 +39,7 @@ func run() error {
 	flag.StringVar(&feedRKey, "rkey", "", "Record key / short name for the feed (e.g. my-cool-feed)")
 	flag.StringVar(&displayName, "name", "", "Feed display name (max 24 graphemes)")
 	flag.StringVar(&description, "description", "", "Feed description (max 300 graphemes)")
+	flag.StringVar(&avatarPath, "avatar-path", "", "Path to avatar image (PNG or JPEG)")
 	flag.BoolVar(&unpublish, "unpublish", false, "Delete the feed generator record instead of publishing")
 	flag.Parse()
 
@@ -54,6 +58,30 @@ func run() error {
 		return err
 	}
 	fmt.Printf("Authenticated as %s\n", client.DID())
+
+	// Handle avatar upload if path provided
+	var avatarRef *bluesky.BlobRef
+	if avatarPath != "" {
+		mimeType, err := detectMimeType(avatarPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %v, skipping avatar upload\n", err)
+		} else {
+			imgData, err := os.ReadFile(avatarPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to read avatar file: %v, skipping avatar upload\n", err)
+			} else {
+				fmt.Printf("Uploading avatar from %s...\n", avatarPath)
+				avatarRef, err = client.UploadBlob(ctx, imgData, mimeType)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "warning: failed to upload avatar: %v, continuing without avatar\n", err)
+					avatarRef = nil
+				} else {
+					fmt.Printf("Avatar uploaded successfully (CID: %s, size: %d bytes, type: %s)\n",
+						avatarRef.Ref.Link, avatarRef.Size, avatarRef.MimeType)
+				}
+			}
+		}
+	}
 
 	if unpublish {
 		fmt.Printf("Unpublishing feed %q...\n", feedRKey)
@@ -75,6 +103,7 @@ func run() error {
 		DID:         serviceDID,
 		DisplayName: displayName,
 		Description: description,
+		Avatar:      avatarRef,
 		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -95,4 +124,17 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// detectMimeType determines MIME type from file extension
+func detectMimeType(path string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".png":
+		return "image/png", nil
+	case ".jpg", ".jpeg":
+		return "image/jpeg", nil
+	default:
+		return "", fmt.Errorf("unsupported file extension %q: expected .png, .jpg, or .jpeg", ext)
+	}
 }
