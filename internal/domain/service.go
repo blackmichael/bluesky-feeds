@@ -2,12 +2,16 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
 	"time"
 )
+
+// ErrUnknownFeed is returned when a requested feed URI is not registered.
+var ErrUnknownFeed = errors.New("unknown feed")
 
 // FeedConfig describes a single feed's matching rules.
 type FeedConfig struct {
@@ -113,7 +117,8 @@ func (s *FeedService) FeedURIs() []string {
 // ProcessNewPost checks an incoming post against all feed rules. If any feed
 // matches, the post is persisted. Returns true if the post was saved.
 func (s *FeedService) ProcessNewPost(ctx context.Context, incoming *IncomingPost) (bool, error) {
-	if !s.matchesAnyFeed(incoming) {
+	feedURIs := s.matchingFeeds(incoming)
+	if len(feedURIs) == 0 {
 		return false, nil
 	}
 
@@ -122,7 +127,7 @@ func (s *FeedService) ProcessNewPost(ctx context.Context, incoming *IncomingPost
 		CID:       incoming.CID,
 		IndexedAt: time.Now().UTC(),
 	}
-	if err := s.repo.CreatePost(ctx, post); err != nil {
+	if err := s.repo.CreatePost(ctx, post, feedURIs); err != nil {
 		return false, fmt.Errorf("create post: %w", err)
 	}
 	return true, nil
@@ -148,13 +153,13 @@ func (s *FeedService) GetFeedSkeleton(ctx context.Context, feedURI string, limit
 	s.logger.Debug("GetFeedSkeleton called", "feedURI", feedURI, "limit", limit, "cursor", cursor)
 
 	if _, ok := s.feeds[feedURI]; !ok {
-		s.logger.Error("unknown feed requested", "feedURI", feedURI, "registered_feeds", s.FeedURIs())
-		return nil, fmt.Errorf("unknown feed: %s", feedURI)
+		s.logger.Warn("unknown feed requested", "feedURI", feedURI, "registered_feeds", s.FeedURIs())
+		return nil, fmt.Errorf("%w: %s", ErrUnknownFeed, feedURI)
 	}
 
 	s.logger.Debug("feed validated, querying repository", "feedURI", feedURI)
 
-	posts, nextCursor, err := s.repo.GetFeedPosts(ctx, limit, cursor)
+	posts, nextCursor, err := s.repo.GetFeedPosts(ctx, feedURI, limit, cursor)
 	if err != nil {
 		s.logger.Error("repository query failed", "feedURI", feedURI, "limit", limit, "cursor", cursor, "error", err)
 		return nil, fmt.Errorf("get feed posts: %w", err)
@@ -191,22 +196,29 @@ func (s *FeedService) StartCleanupJob(ctx context.Context, interval time.Duratio
 }
 
 func (s *FeedService) runCleanup(ctx context.Context, maxAge time.Duration, maxRows int) {
-	deleted, err := s.repo.DeleteOldPosts(ctx, maxAge, maxRows)
-	if err != nil {
-		s.logger.Error("post cleanup failed", "error", err)
-	} else if deleted > 0 {
-		s.logger.Info("post cleanup complete", "deleted", deleted)
+	var totalDeleted int64
+	for uri := range s.feeds {
+		deleted, err := s.repo.DeleteOldPosts(ctx, uri, maxAge, maxRows)
+		if err != nil {
+			s.logger.Error("post cleanup failed", "feedURI", uri, "error", err)
+		} else {
+			totalDeleted += deleted
+		}
+	}
+	if totalDeleted > 0 {
+		s.logger.Info("post cleanup complete", "deleted", totalDeleted)
 	}
 }
 
-// matchesAnyFeed returns true if the incoming post matches at least one feed.
-func (s *FeedService) matchesAnyFeed(incoming *IncomingPost) bool {
+// matchingFeeds returns the URIs of all feeds that match the incoming post.
+func (s *FeedService) matchingFeeds(incoming *IncomingPost) []string {
+	var matched []string
 	for _, f := range s.feeds {
 		if matchesFeed(f, incoming) {
-			return true
+			matched = append(matched, f.uri)
 		}
 	}
-	return false
+	return matched
 }
 
 func matchesFeed(f *feed, incoming *IncomingPost) bool {

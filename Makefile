@@ -6,8 +6,8 @@ LDFLAGS := -ldflags "-s -w"
 BUILD_DIR := bin
 
 .PHONY: all build build-publish run clean test test-verbose test-coverage lint fmt vet tidy check help \
-	docker-up docker-down docker-reset docker-build docker-build-arm64 docker-save-arm64 docker-run docker-logs docker-stop-server docker-up-deps-only \
-	generate publish unpublish migrate-up migrate-down migrate-force
+	docker-up docker-down docker-reset docker-build docker-build-arm64 docker-save-arm64 docker-run docker-logs docker-stop-server \
+	generate publish unpublish
 
 ## help: print this help message
 help:
@@ -87,12 +87,7 @@ docker-up:
 	docker-compose up --build -d
 	@echo "Services started. Server available at http://localhost:3000"
 
-## docker-up-deps-only: start only dependencies, no server
-docker-up-deps-only:
-	docker-compose up -d deps_only
-	@echo "Services started."
-
-## docker-down: stop local Postgres
+## docker-down: stop services
 docker-down:
 	docker-compose down --volumes
 
@@ -103,7 +98,7 @@ docker-logs:
 docker-stop-server:
 	docker stop bluesky-feeds-server-1
 
-## docker-reset: stop Postgres and destroy data volume
+## docker-reset: stop services and destroy data volume
 docker-reset:
 	docker-compose down -v
 
@@ -117,21 +112,8 @@ publish: build-publish
 unpublish: build-publish
 	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; $(BUILD_DIR)/$(APP_NAME)-publish --unpublish $(ARGS)
 
-## migrate-up: run database migrations up (required before first run)
-migrate-up:
-	migrate -path migrations -database postgres://postgres:postgres@localhost:5432/bluesky_feeds?sslmode=disable up
-
-## migrate-down: run database migrations down
-migrate-down:
-	migrate -path migrations -database "postgres://postgres:postgres@localhost:5432/bluesky_feeds?sslmode=disable" down
-
-## migrate-force: force migration version (use with caution)
-## 	e.g. make migrate-force VERSION=1
-migrate-force:
-	migrate -path migrations -database "postgres://postgres:postgres@localhost:5432/bluesky_feeds?sslmode=disable" force $(VERSION)
-
-## setup: start database and run migrations (first-time setup)
-setup: docker-up migrate-up
+## setup: start services (migrations run automatically on startup)
+setup: docker-up
 
 ## docker-build: build Docker image for current platform
 docker-build:

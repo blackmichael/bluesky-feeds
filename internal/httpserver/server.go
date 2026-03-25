@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -116,6 +117,10 @@ func (s *Server) handleGetFeedSkeleton(w http.ResponseWriter, r *http.Request) {
 
 	skeleton, err := s.feedService.GetFeedSkeleton(r.Context(), feedURI, limit, cursor)
 	if err != nil {
+		if errors.Is(err, domain.ErrUnknownFeed) {
+			writeError(w, http.StatusNotFound, "NotFound", "feed not found")
+			return
+		}
 		s.logger.Error("failed to get feed skeleton",
 			"feed", feedURI,
 			"limit", limit,

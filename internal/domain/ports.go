@@ -7,20 +7,21 @@ import (
 
 // PostRepository defines persistence operations for indexed posts.
 type PostRepository interface {
-	// CreatePost inserts a new post into the store.
-	CreatePost(ctx context.Context, post *Post) error
+	// CreatePost inserts a new post into the store, associating it with the
+	// given feed URIs. Each feed gets its own row.
+	CreatePost(ctx context.Context, post *Post, feedURIs []string) error
 
-	// DeletePost removes a post by its AT-URI.
+	// DeletePost removes a post by its AT-URI across all feeds.
 	DeletePost(ctx context.Context, uri string) error
 
-	// DeleteOldPosts removes posts older than maxAge and any excess rows beyond
-	// maxRows, keeping the most recent posts. Returns the number of rows deleted.
-	DeleteOldPosts(ctx context.Context, maxAge time.Duration, maxRows int) (int64, error)
+	// DeleteOldPosts removes posts for a specific feed older than maxAge and
+	// caps the feed at maxRows, keeping the most recent. Returns rows deleted.
+	DeleteOldPosts(ctx context.Context, feedURI string, maxAge time.Duration, maxRows int) (int64, error)
 
-	// GetFeedPosts retrieves posts ordered by indexedAt descending. The cursor
-	// is opaque and implementation-defined. Returns posts and the next cursor
-	// (empty string if no more results).
-	GetFeedPosts(ctx context.Context, limit int, cursor string) ([]Post, string, error)
+	// GetFeedPosts retrieves posts for the given feed URI, ordered by
+	// indexedAt descending. The cursor is opaque and implementation-defined.
+	// Returns posts and the next cursor (empty string if no more results).
+	GetFeedPosts(ctx context.Context, feedURI string, limit int, cursor string) ([]Post, string, error)
 }
 
 // CursorRepository defines persistence operations for firehose cursors.

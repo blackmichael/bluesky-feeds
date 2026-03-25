@@ -17,8 +17,8 @@ type Config struct {
 	// PublisherDID is the DID of the account that published the feed generator records.
 	PublisherDID string
 
-	// DatabaseURL is the Postgres connection string.
-	DatabaseURL string
+	// DatabasePath is the path to the SQLite database file.
+	DatabasePath string
 
 	// FirehoseURL is the Jetstream WebSocket endpoint.
 	FirehoseURL string
@@ -50,9 +50,9 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("FEEDGEN_PUBLISHER_DID is required")
 	}
 
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/bluesky_feeds?sslmode=disable"
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "/data/bluesky-feeds.db"
 	}
 
 	firehoseURL := os.Getenv("FEEDGEN_FIREHOSE_URL")
@@ -64,7 +64,7 @@ func Load() (*Config, error) {
 		Hostname:     hostname,
 		Port:         port,
 		PublisherDID: publisherDID,
-		DatabaseURL:  dbURL,
+		DatabasePath: dbPath,
 		FirehoseURL:  firehoseURL,
 	}, nil
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/blackmichael/bluesky-feeds/internal/domain"
 	"github.com/blackmichael/bluesky-feeds/internal/firehose"
 	"github.com/blackmichael/bluesky-feeds/internal/httpserver"
-	"github.com/blackmichael/bluesky-feeds/internal/postgres"
+	"github.com/blackmichael/bluesky-feeds/internal/sqlite"
 )
 
 func main() {
@@ -35,12 +35,12 @@ func run() error {
 	}
 
 	// Set up repository (implements both PostRepository and CursorRepository)
-	repo, err := postgres.NewRepository(cfg.DatabaseURL)
+	repo, err := sqlite.NewRepository(cfg.DatabasePath)
 	if err != nil {
 		return fmt.Errorf("create repository: %w", err)
 	}
 	defer repo.Close()
-	logger.Info("connected to database")
+	logger.Info("database ready", "path", cfg.DatabasePath)
 
 	// Set up feed service with feed configurations
 	feedConfigs := domain.GetFeedConfigs(cfg.PublisherDID)
