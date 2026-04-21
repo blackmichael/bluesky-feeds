@@ -18,8 +18,14 @@ type FeedConfig struct {
 	// URI is the AT-URI of the feed generator record.
 	URI string
 
-	// Keywords are the terms to match against post text using word boundaries.
-	Keywords []string
+	// OneOfKeywords are the terms to match at least one of.
+	OneOfKeywords []string
+
+	// AllOfKeywords are the terms to match all of.
+	AllOfKeywords []string
+
+	// NoneOfKeywords are the terms to exclude.
+	NoneOfKeywords []string
 
 	// Langs restricts matches to posts tagged with at least one of these
 	// language codes. An empty slice means no language filter.
@@ -30,6 +36,8 @@ type FeedConfig struct {
 type feed struct {
 	uri     string
 	pattern *regexp.Regexp
+	mustContain []string
+	excludes []string
 	langs   map[string]struct{} // nil means no filter
 }
 
@@ -47,7 +55,9 @@ func NewAgenticFeedConfig(publisherDID string) FeedConfig {
 	feedURI := newFeedURI(publisherDID, "agentic")
 	return FeedConfig{
 		URI:      feedURI,
-		Keywords: []string{"agentic", "agentic engineering", "agentic ai", "llm agents", "multi-agent", "llm benchmarks", "ai workflows", "llm orchestration", "context window", "claude", "claude opus", "claude sonnet", "claude haiku", "gpt-", "codex", "composer-1", "gemini", "hugging face", "opencode", "meta llama"},
+		OneOfKeywords: []string{"agentic", "agentic engineering", "agentic ai", "llm agents", "multi-agent", "llm benchmarks", "ai workflows", "llm orchestration", "context window", "claude", "claude opus", "claude sonnet", "claude haiku", "claude mythos", "gpt", "codex", "composer-1", "gemini", "hugging face", "opencode", "meta llama"},
+		AllOfKeywords: []string{"https://", "AI"},
+		NoneOfKeywords: []string{"ン","ー","ツ"},
 		Langs:    []string{"en"},
 	}
 }
@@ -67,12 +77,12 @@ func NewFeedService(configs []FeedConfig, repo PostRepository, cursors CursorRep
 	feeds := make(map[string]*feed, len(configs))
 
 	for _, cfg := range configs {
-		if len(cfg.Keywords) == 0 {
+		if len(cfg.OneOfKeywords) == 0 {
 			return nil, fmt.Errorf("feed %s: at least one keyword is required", cfg.URI)
 		}
 
-		escaped := make([]string, len(cfg.Keywords))
-		for i, kw := range cfg.Keywords {
+		escaped := make([]string, len(cfg.OneOfKeywords))
+		for i, kw := range cfg.OneOfKeywords {
 			escaped[i] = regexp.QuoteMeta(kw)
 		}
 
@@ -85,6 +95,8 @@ func NewFeedService(configs []FeedConfig, repo PostRepository, cursors CursorRep
 		f := &feed{
 			uri:     cfg.URI,
 			pattern: pattern,
+			mustContain: cfg.AllOfKeywords,
+			excludes: cfg.NoneOfKeywords,
 		}
 
 		if len(cfg.Langs) > 0 {
@@ -121,6 +133,8 @@ func (s *FeedService) ProcessNewPost(ctx context.Context, incoming *IncomingPost
 	if len(feedURIs) == 0 {
 		return false, nil
 	}
+
+	// s.logger.Info("matched post", "text", incoming.Text, "langs", incoming.Langs, "uri", incoming.URI)
 
 	post := &Post{
 		URI:       incoming.URI,
@@ -234,5 +248,22 @@ func matchesFeed(f *feed, incoming *IncomingPost) bool {
 			return false
 		}
 	}
-	return f.pattern.MatchString(incoming.Text)
+
+	if !f.pattern.MatchString(incoming.Text) {
+		return false
+	}
+
+	for _, mustContain := range f.mustContain {
+		if !strings.Contains(incoming.Text, mustContain) {
+			return false
+		}
+	}
+
+	for _, excludes := range f.excludes {
+		if strings.Contains(incoming.Text, excludes) {
+			return false
+		}
+	}
+
+	return true
 }
