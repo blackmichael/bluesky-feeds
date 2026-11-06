@@ -163,8 +163,10 @@ func (s *FeedService) UpdateCursor(ctx context.Context, service string, cursor i
 }
 
 // GetFeedSkeleton returns a page of the feed skeleton for the given feed URI.
-func (s *FeedService) GetFeedSkeleton(ctx context.Context, feedURI string, limit int, cursor string) (*FeedSkeleton, error) {
-	s.logger.Debug("GetFeedSkeleton called", "feedURI", feedURI, "limit", limit, "cursor", cursor)
+// viewerDID identifies the requesting account and is empty for anonymous
+// requests; it is available for per-viewer ranking and diagnostics only.
+func (s *FeedService) GetFeedSkeleton(ctx context.Context, viewerDID string, feedURI string, limit int, cursor string) (*FeedSkeleton, error) {
+	s.logger.Debug("GetFeedSkeleton called", "feedURI", feedURI, "viewer", viewerDID, "limit", limit, "cursor", cursor)
 
 	if _, ok := s.feeds[feedURI]; !ok {
 		s.logger.Warn("unknown feed requested", "feedURI", feedURI, "registered_feeds", s.FeedURIs())
@@ -175,7 +177,7 @@ func (s *FeedService) GetFeedSkeleton(ctx context.Context, feedURI string, limit
 
 	posts, nextCursor, err := s.repo.GetFeedPosts(ctx, feedURI, limit, cursor)
 	if err != nil {
-		s.logger.Error("repository query failed", "feedURI", feedURI, "limit", limit, "cursor", cursor, "error", err)
+		s.logger.Error("repository query failed", "feedURI", feedURI, "viewer", viewerDID, "limit", limit, "cursor", cursor, "error", err)
 		return nil, fmt.Errorf("get feed posts: %w", err)
 	}
 

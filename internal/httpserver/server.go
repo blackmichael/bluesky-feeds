@@ -113,9 +113,27 @@ func (s *Server) handleGetFeedSkeleton(w http.ResponseWriter, r *http.Request) {
 
 	cursor := r.URL.Query().Get("cursor")
 
-	s.logger.Info("getFeedSkeleton request", "feed", feedURI, "limit", limit, "cursor", cursor)
+	// The viewer's DID comes from the bearer token. Anonymous requests are
+	// allowed, so a missing or unparseable token is not fatal.
+	viewerDID, err := requesterDID(r)
+	if err != nil {
+		if !errors.Is(err, errNoAuthHeader) {
+			s.logger.Warn("could not parse requester DID from authorization header",
+				"feed", feedURI,
+				"error", err,
+			)
+		}
+		viewerDID = ""
+	}
 
-	skeleton, err := s.feedService.GetFeedSkeleton(r.Context(), feedURI, limit, cursor)
+	s.logger.Info("getFeedSkeleton request",
+		"feed", feedURI,
+		"limit", limit,
+		"cursor", cursor,
+		"viewer", viewerDID,
+	)
+
+	skeleton, err := s.feedService.GetFeedSkeleton(r.Context(), viewerDID, feedURI, limit, cursor)
 	if err != nil {
 		if errors.Is(err, domain.ErrUnknownFeed) {
 			writeError(w, http.StatusNotFound, "NotFound", "feed not found")
@@ -125,13 +143,19 @@ func (s *Server) handleGetFeedSkeleton(w http.ResponseWriter, r *http.Request) {
 			"feed", feedURI,
 			"limit", limit,
 			"cursor", cursor,
+			"viewer", viewerDID,
 			"error", err,
 		)
 		writeError(w, http.StatusInternalServerError, "InternalError", "failed to get feed")
 		return
 	}
 
-	s.logger.Info("getFeedSkeleton success", "feed", feedURI, "posts_returned", len(skeleton.Posts), "next_cursor", skeleton.Cursor)
+	s.logger.Info("getFeedSkeleton success",
+		"feed", feedURI,
+		"viewer", viewerDID,
+		"posts_returned", len(skeleton.Posts),
+		"next_cursor", skeleton.Cursor,
+	)
 
 	resp := map[string]any{
 		"feed": toSkeletonResponse(skeleton.Posts),
